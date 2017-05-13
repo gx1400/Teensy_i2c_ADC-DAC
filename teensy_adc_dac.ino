@@ -40,6 +40,9 @@ boolean ledstate = 0;
 uint16_t voltset = 4095;
 String inputString;
 boolean strComplete = false;
+float scale = 0.0001875;
+int16_t results = 0.0;
+float fResult = 0.0;
 
 float vset = 0.00;
 float iset = 0.00;
@@ -61,6 +64,8 @@ void setup() {
   ads.begin();
 
   delay(500);
+  ReadDAC();
+  vset = fResult - 0.0045; // keep previous value, but DAC has a non-zero offset, so won't ever match
   tmrChange.begin(Change, 1000000);
 }
 
@@ -112,33 +117,18 @@ void loop() {
 }
 
 void Change(void) {
-  int16_t results;
-  float scale = 0.0001875;
+  
   if (ledstate) {
     ledstate = 0;
   }
   else {
     ledstate = 1;
   }
-
-  if (voltset == 4095) {
-    voltset = 2048;
-  }
-  else {
-    voltset = 4095;
-  }
   
   digitalWrite(LED, ledstate);
-  dac.setVoltage(voltset, false);
-  results = ads.readADC_Differential_0_1(); 
-  Serial.print("Raw: ");
-  Serial.println(results);
-
-  String strOut = "";
-  strOut = String(results * scale, 4);
-  Serial.print("Scaled: ");
-  Serial.print(strOut);
-  Serial.println("V");
+  uint16_t uSetpoint = scaleVoltage(vset);
+  dac.setVoltage(uSetpoint, true);
+  ReadDAC();
 }
 
 void serialEvent() {
@@ -187,5 +177,30 @@ float checkCurrent(float amps) {
   }
 
   return out;
+}
+
+uint16_t scaleVoltage(float setpoint){
+  uint16_t out = 0;
+  float scaler = 3.3313 / 4096;
+  out = setpoint / scaler;
+  //Serial.print("Setpoint: ");
+  //Serial.println(setpoint);
+  //Serial.print("Scaler: ");
+  //Serial.println(out);
+  
+  return out;
+}
+
+void ReadDAC(void) {
+  results = ads.readADC_Differential_0_1(); 
+  Serial.print("Raw: ");
+  Serial.println(results);
+
+  String strOut = "";
+  fResult = results * scale;
+  strOut = String(fResult, 4);
+  Serial.print("Scaled: ");
+  Serial.print(strOut);
+  Serial.println("V");
 }
 

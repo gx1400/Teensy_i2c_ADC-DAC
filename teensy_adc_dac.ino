@@ -28,9 +28,21 @@
 
 Teensy_MCP4725 dac;
 Adafruit_ADS1115 ads;
+IntervalTimer tmrChange;
+
 const uint8_t LED = LED_BUILTIN; //Teensy LED_BUILTIN is pin13
+const float MAX_CURRENT = 5.00;
+const float MIN_CURRENT = 0.00;
+const float MAX_VOLTAGE = 3.00;
+const float MIN_VOLTAGE = 0.00;
+
 boolean ledstate = 0;
 uint16_t voltset = 4095;
+String inputString;
+boolean strComplete = false;
+
+float vset = 0.00;
+float iset = 0.00;
 
 void setup() {
   // put your setup code here, to run once:
@@ -39,7 +51,7 @@ void setup() {
   Serial.begin(9600);
   Serial.println("Starting program...");
   delay(1000);
-
+ 
   // For Adafruit MCP4725A1 the address is 0x62 (default) or 0x63 (ADDR pin tied to VCC)
   // For MCP4725A0 the address is 0x60 or 0x61
   // For MCP4725A2 the address is 0x64 or 0x65
@@ -47,9 +59,59 @@ void setup() {
   Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_INT, I2C_RATE_400);
   dac.begin(0x62);
   ads.begin();
+
+  delay(500);
+  tmrChange.begin(Change, 1000000);
 }
 
 void loop() {
+  if (strComplete) {
+    Serial.println("Read serial data!");
+    Serial.print(inputString);
+    String strOut = "";
+    char cComm = inputString[0];
+    String sValue = "";
+    float fValue = 0;
+    
+    switch (cComm) {
+      case 'v':
+        fValue = inputString.substring(1).toFloat();
+        fValue = checkVoltage(fValue);
+        strOut = "Setting voltage..." + String(fValue, 4);
+        setVoltage(fValue);
+        break;
+      case 'i':
+        fValue = inputString.substring(1).toFloat();
+        fValue = checkCurrent(fValue);
+        strOut = "Setting current..." + String(fValue, 4);;
+        setCurrent(fValue);
+        break;
+      case 's':
+        strOut = "Printing setpoints...";
+        break;
+      default:
+        strOut = "Command not recognized";
+      break;
+    }
+    Serial.println(strOut);
+
+    
+    Serial.print("Vset: ");
+    strOut = String(vset, 4);
+    Serial.print(strOut);
+    Serial.println("V");
+
+    Serial.print("Iset: ");
+    strOut = String(iset, 4);
+    Serial.print(strOut);
+    Serial.println("A");
+    
+    inputString = "";
+    strComplete = false;
+  }
+}
+
+void Change(void) {
   int16_t results;
   float scale = 0.0001875;
   if (ledstate) {
@@ -71,9 +133,59 @@ void loop() {
   results = ads.readADC_Differential_0_1(); 
   Serial.print("Raw: ");
   Serial.println(results);
-  Serial.print("Scaled: ");
-  Serial.println(results * scale);
-  delay(2000);
 
-  
+  String strOut = "";
+  strOut = String(results * scale, 4);
+  Serial.print("Scaled: ");
+  Serial.print(strOut);
+  Serial.println("V");
 }
+
+void serialEvent() {
+  while (Serial.available()) {
+    char inChar = (char)Serial.read();
+
+    inputString += inChar;
+
+    if (inChar == '\n') {
+      strComplete = true;
+    }
+  }
+}
+
+void setVoltage(float volts) {
+  vset = volts;
+}
+
+void setCurrent(float current) {
+  iset = current;
+}
+
+float checkVoltage(float volts) {
+  float out = vset;
+  if (volts <= MAX_VOLTAGE && volts >= MIN_VOLTAGE) {
+    Serial.println("Voltage checked ok!");
+    out = volts;
+  }
+  else {
+    Serial.println("ERROR: Voltage out of range!");
+    out = vset;
+  }
+
+  return out;
+}
+
+float checkCurrent(float amps) {
+  float out = iset;
+  if (amps <= MAX_CURRENT && amps >= MIN_CURRENT) {
+    Serial.println("Current checked ok!");
+    out = amps;
+  }
+  else {
+    Serial.println("ERROR: Current out of range!");
+    out = iset;
+  }
+
+  return out;
+}
+
